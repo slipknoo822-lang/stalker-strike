@@ -966,3 +966,15 @@ def show_menu_v2():
         else: _username_menu_v2(value)
 
         print(); input("  Press Enter to return to main menu...")
+
+
+async def _run_whatsapp_intel(phone: str):
+    """Standalone WhatsApp intelligence for a phone number."""
+    from stalker.modules.whatsapp_intel import full_whatsapp_intel, format_wa_report
+    from stalker.modules.stealth_reporter import save_full_report
+    term.print_phase(1, "WhatsApp Intel", f"Investigating {phone}...")
+    data = await full_whatsapp_intel(phone)
+    print(format_wa_report(data))
+    saved = await save_full_report({"phone": phone, "whatsapp_intel": data}, output_dir="output")
+    if saved.get("json"):     term.print_success(f"  Saved: {saved['json']}")
+    if saved.get("markdown"): term.print_success(f"  Saved: {saved['markdown']}")
