@@ -1,4 +1,4 @@
-"""Stalker — Interactive entry point with auto-detection (phone/email/username).
+"""OMNI — Interactive entry point with auto-detection (phone/email/username).
 
 Modes adapt based on input type:
   - Phone  (+62...): Phone Scanner, Breach, Telegram
@@ -156,7 +156,7 @@ async def _telegram_send(username: str, result: dict, report_files: list):
     print("  Sending report to Telegram...")
 
     s = result.get("summary", {})
-    lines = [f"<b>Stalker Investigation Report</b>", f"Username: @{username}"]
+    lines = [f"<b>OMNI Intelligence Report</b>", f"Target: @{username}"]
     lines.append("")
 
     pf = s.get("profiles_found", 0)
