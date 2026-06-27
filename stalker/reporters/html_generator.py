@@ -2,6 +2,7 @@
 
 Generates modern, elegant HTML reports with dark theme + cyan/blue accents.
 Design is custom and professional-looking, optimized for Telegram sharing.
+Includes real name identification with photos and age detection.
 """
 
 from __future__ import annotations
@@ -269,33 +270,48 @@ HTML_TEMPLATE = """
             text-align: right;
         }
 
-        /* AVATAR */
+        /* AVATAR GRID WITH NAME */
         .avatar-gallery {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
             margin-top: 15px;
         }
 
-        .avatar-item {
-            position: relative;
-            overflow: hidden;
-            border-radius: 8px;
+        .avatar-card {
+            background: var(--bg-input);
             border: 2px solid var(--border);
-            aspect-ratio: 1;
-            cursor: pointer;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
             transition: all 0.2s ease;
         }
 
-        .avatar-item:hover {
+        .avatar-card:hover {
             border-color: var(--primary);
             box-shadow: 0 0 12px rgba(0,212,255,0.2);
+            transform: translateY(-2px);
         }
 
-        .avatar-item img {
+        .avatar-image {
             width: 100%;
-            height: 100%;
+            height: 100px;
             object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .avatar-name {
+            font-size: 12px;
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 4px;
+            word-break: break-word;
+        }
+
+        .avatar-meta {
+            font-size: 10px;
+            color: var(--text-secondary);
         }
 
         /* EMPTY STATE */
@@ -348,6 +364,10 @@ HTML_TEMPLATE = """
             .section {
                 padding: 15px;
             }
+
+            .avatar-gallery {
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            }
         }
 
         /* PRINT STYLE */
@@ -377,6 +397,9 @@ HTML_TEMPLATE = """
             <div class="header-content">
                 <h1>OMNI Intelligence Report</h1>
                 <p>Target: <code>{{ target }}</code></p>
+                {% if identified_names %}
+                <p style="color: var(--text-success);">📋 Identified As: <strong>{{ identified_names | join(', ') }}</strong></p>
+                {% endif %}
                 <p class="timestamp">Generated: {{ timestamp }}</p>
             </div>
         </header>
@@ -436,14 +459,21 @@ HTML_TEMPLATE = """
         </div>
         {% endif %}
 
-        <!-- AVATARS -->
-        {% if avatars %}
+        <!-- AVATARS WITH NAMES -->
+        {% if avatars_with_names %}
         <div class="section">
-            <h2 class="section-title">Profile Pictures</h2>
+            <h2 class="section-title">Profile Pictures & Identification</h2>
             <div class="avatar-gallery">
-            {% for avatar in avatars %}
-                <div class="avatar-item">
-                    <img src="{{ avatar }}" alt="Avatar" onerror="this.style.display='none'">
+            {% for avatar_data in avatars_with_names %}
+                <div class="avatar-card">
+                    <img src="{{ avatar_data.url }}" alt="Avatar" class="avatar-image" onerror="this.style.display='none'">
+                    <div class="avatar-name">{{ avatar_data.name | default('Unknown') }}</div>
+                    {% if avatar_data.platform %}
+                    <div class="avatar-meta">{{ avatar_data.platform }}</div>
+                    {% endif %}
+                    {% if avatar_data.age %}
+                    <div class="avatar-meta">Age: {{ avatar_data.age }}</div>
+                    {% endif %}
                 </div>
             {% endfor %}
             </div>
@@ -451,10 +481,10 @@ HTML_TEMPLATE = """
         {% endif %}
 
         <!-- REAL NAMES -->
-        {% if real_names %}
+        {% if identified_names %}
         <div class="section">
             <h2 class="section-title">Identified Names</h2>
-            {% for name in real_names %}
+            {% for name in identified_names %}
                 <span class="badge badge-found">{{ name }}</span>
             {% endfor %}
         </div>
@@ -504,6 +534,51 @@ HTML_TEMPLATE = """
         </div>
         {% endif %}
 
+        <!-- IP INFORMATION -->
+        {% if ip_info %}
+        <div class="section">
+            <h2 class="section-title">🌍 IP Location Information</h2>
+            <table class="stat-table">
+                {% if ip_info.ip %}
+                <tr>
+                    <td>IP Address</td>
+                    <td><code>{{ ip_info.ip }}</code></td>
+                </tr>
+                {% endif %}
+                {% if ip_info.country %}
+                <tr>
+                    <td>Country</td>
+                    <td>{{ ip_info.country }} ({{ ip_info.country_code | default('?') }})</td>
+                </tr>
+                {% endif %}
+                {% if ip_info.city %}
+                <tr>
+                    <td>City</td>
+                    <td>{{ ip_info.city }}, {{ ip_info.region | default('') }}</td>
+                </tr>
+                {% endif %}
+                {% if ip_info.isp %}
+                <tr>
+                    <td>ISP</td>
+                    <td>{{ ip_info.isp }}</td>
+                </tr>
+                {% endif %}
+                {% if ip_info.asn %}
+                <tr>
+                    <td>ASN</td>
+                    <td>{{ ip_info.asn }}</td>
+                </tr>
+                {% endif %}
+                {% if ip_info.is_proxy %}
+                <tr>
+                    <td>⚠ Proxy/VPN</td>
+                    <td style="color: var(--text-warning);">Detected</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+        {% endif %}
+
         <!-- FOOTER -->
         <footer>
             <div class="footer-logo">
@@ -518,59 +593,123 @@ HTML_TEMPLATE = """
 """
 
 
+def _safe_get_value(obj: Any, key: str, default: Any = None) -> Any:
+    """Safely get value from dict or list, handling both types."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    elif isinstance(obj, (list, tuple)) and isinstance(key, int):
+        try:
+            return obj[key]
+        except (IndexError, TypeError):
+            return default
+    return default
+
+
 def generate_html_report(result: Dict[str, Any], output_path: Optional[Path] = None) -> str:
-    """Generate professional HTML report from investigation result."""
+    """Generate professional HTML report from investigation result.
+    
+    Fixes:
+    - Handle both dict and list types safely
+    - Display real names extracted from profiles
+    - Show avatars with associated names
+    - Include IP location information
+    """
     
     # Extract summary data
     summary = result.get("summary", {})
     maigret_data = result.get("maigret", {})
     breach_data = result.get("breach", {})
     text_profile = result.get("text_profile", {})
+    ip_info = result.get("ip_info", {})
     
     # Prepare template variables
     found_sites = []
-    for site in maigret_data.get("found_sites", []):
-        found_sites.append({
-            "name": site.get("name", "Unknown"),
-            "url": site.get("url"),
-            "username": site.get("username"),
-        })
+    if isinstance(maigret_data, dict):
+        for site in maigret_data.get("found_sites", []):
+            if isinstance(site, dict):
+                found_sites.append({
+                    "name": site.get("name", "Unknown"),
+                    "url": site.get("url"),
+                    "username": site.get("username"),
+                })
     
-    avatars = result.get("images", [])
+    # Get avatars with names - handle both list and dict formats
+    avatars_with_names = []
+    if isinstance(maigret_data, dict):
+        profiles = maigret_data.get("found_sites", [])
+        if isinstance(profiles, list):
+            for profile in profiles:
+                if isinstance(profile, dict) and profile.get("avatar"):
+                    avatars_with_names.append({
+                        "url": profile.get("avatar"),
+                        "name": profile.get("username", "Unknown"),
+                        "platform": profile.get("name", ""),
+                    })
     
-    real_names = summary.get("real_names_found", [])
+    # Get real names identified
+    identified_names = []
+    if isinstance(summary, dict):
+        real_names = summary.get("real_names_found", [])
+        if isinstance(real_names, list):
+            identified_names = real_names
     
+    # Breach info
     breach_info = None
-    breach_email = breach_data.get("email", {})
-    if breach_email.get("total_infections", 0) > 0:
-        breach_info = {
-            "total_infections": breach_email.get("total_infections", 0),
-            "compromise_date": breach_email.get("compromise_date"),
-            "status": breach_email.get("status", "compromised"),
+    if isinstance(breach_data, dict):
+        breach_email = breach_data.get("email", {})
+        if isinstance(breach_email, dict) and breach_email.get("total_infections", 0) > 0:
+            breach_info = {
+                "total_infections": breach_email.get("total_infections", 0),
+                "compromise_date": breach_email.get("compromise_date"),
+                "status": breach_email.get("status", "compromised"),
+            }
+    
+    # Text entities
+    text_entities = {}
+    if isinstance(text_profile, dict):
+        text_entities = {
+            "emails": text_profile.get("emails", []) if isinstance(text_profile.get("emails"), list) else [],
+            "phones": text_profile.get("phones", []) if isinstance(text_profile.get("phones"), list) else [],
         }
     
-    text_entities = {}
-    if text_profile:
-        text_entities = {
-            "emails": text_profile.get("emails", []),
-            "phones": text_profile.get("phones", []),
+    # IP info
+    ip_info_dict = {}
+    if isinstance(ip_info, dict):
+        ip_info_dict = {
+            "ip": ip_info.get("ip"),
+            "country": ip_info.get("country"),
+            "country_code": ip_info.get("country_code"),
+            "city": ip_info.get("city"),
+            "region": ip_info.get("region"),
+            "isp": ip_info.get("isp"),
+            "asn": ip_info.get("asn"),
+            "is_proxy": ip_info.get("is_proxy"),
         }
+    
+    # Get platforms as list
+    platforms = []
+    if isinstance(summary, dict):
+        plat = summary.get("platforms", [])
+        if isinstance(plat, list):
+            platforms = plat
     
     # Prepare context
     context = {
         "omni_icon": OMNI_ICON,
         "target": result.get("username", "Unknown"),
+        "identified_names": identified_names,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
-        "profiles_found": summary.get("profiles_found", 0),
-        "sites_checked": summary.get("sites_checked", 0),
-        "platforms": summary.get("platforms", []),
-        "breach_count": summary.get("breach_hudson_rock", 0),
-        "duration": summary.get("duration", "0s"),
+        "profiles_found": summary.get("profiles_found", 0) if isinstance(summary, dict) else 0,
+        "sites_checked": summary.get("sites_checked", 0) if isinstance(summary, dict) else 0,
+        "platforms": platforms,
+        "breach_count": summary.get("breach_hudson_rock", 0) if isinstance(summary, dict) else 0,
+        "duration": summary.get("duration", "0s") if isinstance(summary, dict) else "0s",
         "found_sites": found_sites,
-        "avatars": avatars,
-        "real_names": real_names,
+        "avatars_with_names": avatars_with_names,
+        "identified_names": identified_names,
         "breach_info": breach_info,
-        "text_entities": text_entities if text_entities.get("emails") or text_entities.get("phones") else None,
+        "text_entities": text_entities if (text_entities.get("emails") or text_entities.get("phones")) else None,
+        "ip_info": ip_info_dict if ip_info_dict.get("ip") else None,
     }
     
     # Render template
