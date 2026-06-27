@@ -839,3 +839,130 @@ def show_ip_menu():
     ip = input("\n  Enter IP address (or 'me' for your IP): ").strip()
     if ip:
         asyncio.run(_run_ip_tracker(ip))
+
+
+async def _run_cyber_intel_full(target: str, input_type: str):
+    """Run full cyber intelligence suite after base investigation."""
+    from stalker.pipeline import run_investigation, save_report
+    from stalker.cyber_intel import run_cyber_intel
+    from stalker.modules.termux_tools import post_investigation_notify
+
+    term.print_phase(1, "Base Investigation", f"Running standard pipeline for {target}...")
+    result = await run_investigation(target, enable_exif=True, enable_dork=True)
+
+    term.print_phase(2, "Cyber Intelligence", "Running advanced intel modules...")
+    result = await run_cyber_intel(result, input_type=input_type)
+
+    saved = await save_report(result, formats=["json", "html"])
+    if IS_TERMUX and saved:
+        await _telegram_send(target, result, saved)
+    await post_investigation_notify(target, result.get("summary", {}), saved)
+
+
+def _username_menu_v2(username: str):
+    print("  [1] Full Investigation       — All modules (comprehensive)")
+    print("  [2] Quick Profile            — Username + APIs + Breach + Telegram")
+    print("  [3] Deep Telegram            — Telegram profiler only")
+    print("  [4] Smart Dork Only          — Quick search -> Dork -> Report")
+    print("  [5] Face Search              — 5 engines on avatar")
+    print("  [6] Guided Mode              — Pick specific modules")
+    print("  [7] Linktree/Bio.site/Carrd  — Check link aggregators")
+    print("  [8] Pastebin Leak Check      — Search pastebin/justpaste")
+    print("  [9] Username Variants        — Generate + search permutations")
+    print("  [C] CYBER INTEL MODE         — Full suite: GitHub + Reddit + Gravatar")
+    print("                                 Wayback + Correlation + Timeline + Risk Score")
+    print("  [p] Show pipeline diagrams")
+    print()
+    choice = input("  Choose: ").strip().lower()
+
+    mode_map = {
+        "1": lambda: asyncio.run(_run_full(username)),
+        "2": lambda: asyncio.run(_run_quick(username)),
+        "3": lambda: asyncio.run(_run_telegram(username)),
+        "4": lambda: asyncio.run(_run_dork_only(username)),
+        "5": lambda: asyncio.run(_run_face_search(username)),
+        "7": lambda: asyncio.run(_run_linktree(username)),
+        "8": lambda: asyncio.run(_run_pastebin(username)),
+        "9": lambda: asyncio.run(_run_username_variants(username)),
+        "c": lambda: asyncio.run(_run_cyber_intel_full(username, "username")),
+    }
+    if choice == "p":
+        print(PIPELINE_FULL); print(PIPELINE_QUICK); input("  Press Enter..."); return
+    if choice == "6":
+        asyncio.run(_run_guided(username)); return
+    fn = mode_map.get(choice)
+    if fn: fn()
+    else: term.print_error("Invalid choice.")
+
+
+def _email_menu_v2(email: str):
+    print("  [1] Full Investigation       — Email Scanner + Breach + Dark Web + Dork")
+    print("  [2] Email Scanner Only       — 30+ platforms")
+    print("  [3] Breach Check + Dork      — Hudson Rock + Smart Dork")
+    print("  [4] Dark Web Only            — Paste sites + breach DBs")
+    print("  [5] Domain WHOIS Check       — WHOIS + CRT.sh")
+    print("  [6] Guided Mode              — Pick specific modules")
+    print("  [C] CYBER INTEL MODE         — Email Intel + Gravatar + CRT.sh")
+    print("                                 Correlation + Timeline + Risk Score")
+    print()
+    choice = input("  Choose: ").strip().lower()
+
+    if choice == "1": asyncio.run(_run_email_full(email))
+    elif choice == "2": asyncio.run(_run_email(email))
+    elif choice == "3": asyncio.run(_run_email_breach_dork(email))
+    elif choice == "4": asyncio.run(_run_darkweb_check(email, "email"))
+    elif choice == "5": asyncio.run(_run_whois(email))
+    elif choice == "6": asyncio.run(_run_guided(email))
+    elif choice == "c": asyncio.run(_run_cyber_intel_full(email, "email"))
+    else: term.print_error("Invalid choice.")
+
+
+def _phone_menu_v2(phone: str):
+    print("  [1] Phone Investigation      — Phone Scanner (6 platforms) + Full Intel")
+    print("  [2] Phone Scanner Only       — Check 6 social platforms")
+    print("  [3] Anti-Scam Toolkit        — Report + expose scammer")
+    print("  [4] Guided Mode              — Pick specific modules")
+    print("  [C] CYBER INTEL MODE         — Full Intel + Correlation + Risk Score")
+    print()
+    choice = input("  Choose: ").strip().lower()
+
+    if choice == "1": asyncio.run(_run_phone_full(phone))
+    elif choice == "2": asyncio.run(_run_phone_only(phone))
+    elif choice == "3": asyncio.run(_run_anti_scam(phone))
+    elif choice == "4": asyncio.run(_run_guided(phone))
+    elif choice == "c": asyncio.run(_run_cyber_intel_full(phone, "phone"))
+    else: term.print_error("Invalid choice.")
+
+
+def show_menu_v2():
+    """Enhanced v2.0 menu with Cyber Intel Mode."""
+    while True:
+        _clear_screen()
+        term.print_banner()
+        term.print_divider()
+        print()
+        print("  [u] Update Maigret database")
+        print("  [i] Track an IP address")
+        print()
+        value = input("  Enter username, email, or phone (or 'exit'): ").strip()
+        if value.lower() in ("exit", "quit", "0"):
+            print("\n  Goodbye!"); break
+        if value.lower() == "u":
+            os.system("python -m maigret --update-db")
+            input("  Update complete. Press Enter..."); continue
+        if value.lower() == "i":
+            show_ip_menu(); input("  Press Enter..."); continue
+        if not value:
+            term.print_error("Input required!"); input("  Press Enter..."); continue
+
+        is_email = "@" in value and "." in value.split("@")[-1]
+        is_phone = bool(PHONE_RE.match(value.replace(" ","").replace("-","")))
+        input_type = "PHONE" if is_phone else "EMAIL" if is_email else "USERNAME"
+        print(f"\n  Detected: {input_type}")
+        print()
+
+        if is_phone: _phone_menu_v2(value)
+        elif is_email: _email_menu_v2(value)
+        else: _username_menu_v2(value)
+
+        print(); input("  Press Enter to return to main menu...")

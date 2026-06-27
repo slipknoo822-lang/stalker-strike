@@ -1,108 +1,128 @@
 #!/bin/bash
-# Stalker - OSINT Investigation Tool (Termux / Linux)
+# Stalker Strike v2.0 — OSINT + Cyber Intelligence Tool
+# Termux Android / Linux / macOS
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo "========================================"
-echo "  Stalker - OSINT Investigation Tool"
-echo "========================================"
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
+ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+err()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+
+clear
+echo -e "${BOLD}${CYAN}"
+cat << 'BANNER'
+  _____ _______       _      _  ________ _____
+ / ____|__   __|/\   | |    | |/ /  ____|  __ \
+| (___    | |  /  \  | |    | ' /| |__  | |__) |
+ \___ \   | | / /\ \ | |    |  < |  __| |  _  /
+ ____) |  | |/ ____ \| |____| . \| |____| | \ \
+|_____/   |_/_/    \_\______|_|\_\______|_|  \_\
+BANNER
+echo -e "${NC}"
+echo -e "  ${BOLD}v2.0 — Cyber Intelligence Edition${NC}"
+echo -e "  Maigret + GitHub Intel + Reddit + Gravatar + Wayback"
+echo -e "  Correlation Engine + Timeline + Risk Score + Dark Web"
 echo ""
 
-# Find Python
+# ── Find Python ───────────────────────────────────────────────
 PYTHON=""
-if command -v python3 &>/dev/null; then PYTHON="python3"
-elif command -v python &>/dev/null; then PYTHON="python"
+for cmd in python3 python python3.12 python3.11 python3.10; do
+    if command -v "$cmd" &>/dev/null; then
+        VER=$($cmd -c "import sys; print(sys.version_info.major*10+sys.version_info.minor)" 2>/dev/null)
+        if [ "$VER" -ge 30 ] 2>/dev/null; then PYTHON="$cmd"; break; fi
+    fi
+done
+[ -z "$PYTHON" ] && err "Python 3.10+ not found!\n  Termux: pkg install python\n  Linux: sudo apt install python3"
+ok "Python: $($PYTHON --version)"
+
+# ── Detect environment ────────────────────────────────────────
+IS_TERMUX=false; IS_LINUX=false; IS_MAC=false
+[ -d /data/data/com.termux ] && IS_TERMUX=true
+[[ "$OSTYPE" == "linux-gnu"* ]] && ! $IS_TERMUX && IS_LINUX=true
+[[ "$OSTYPE" == "darwin"* ]] && IS_MAC=true
+
+if $IS_TERMUX; then
+    echo -e "  ${CYAN}Environment: Termux Android${NC}"
+elif $IS_MAC; then
+    echo -e "  ${CYAN}Environment: macOS${NC}"
 else
-    echo "[ERROR] Python not found!"
-    echo "  Termux: pkg install python"
-    echo "  Linux:  sudo apt install python3 python3-pip"
-    read -p "Press Enter to exit..."
-    exit 1
+    echo -e "  ${CYAN}Environment: Linux${NC}"
 fi
-echo "[OK] Python: $($PYTHON --version)"
+
+# ── Check if first run / deps missing ────────────────────────
+NEEDS_SETUP=false
+$PYTHON -c "import httpx, click, rich, maigret" 2>/dev/null || NEEDS_SETUP=true
+
+if $NEEDS_SETUP; then
+    echo ""
+    echo -e "  ${YELLOW}[SETUP]${NC} First run detected — installing dependencies..."
+    echo ""
+
+    # Base deps
+    if $IS_TERMUX; then
+        echo -e "  ${CYAN}[SETUP]${NC} Termux: Installing minimal deps (no C compilation)..."
+        $PYTHON -m pip install --quiet httpx click rich python-dotenv jinja2 \
+            googlesearch-python pyvis networkx phonenumbers python-whois \
+            aiohttp aiofiles 2>/dev/null
+        # Maigret minimal for Termux
+        $PYTHON -m pip install --quiet aiohttp-socks certifi colorama html5lib \
+            MarkupSafe PySocks socid-extractor soupsieve alive_progress \
+            typing-extensions yarl platformdirs pycountry python-socks python-dateutil 2>/dev/null
+        $PYTHON -m pip install -e maigret/ --no-deps --quiet 2>/dev/null || \
+            $PYTHON -m pip install -e maigret/ --quiet 2>/dev/null
+    else
+        $PYTHON -m pip install --quiet httpx click rich python-dotenv jinja2 \
+            googlesearch-python pyvis networkx phonenumbers python-whois \
+            aiohttp aiofiles 2>/dev/null
+        $PYTHON -m pip install -e maigret/ --quiet 2>/dev/null
+    fi
+
+    if $PYTHON -c "import httpx, click, rich" 2>/dev/null; then
+        ok "Dependencies installed"
+    else
+        err "Dependency install failed. Try running manually:\n  pip install httpx click rich python-dotenv jinja2 pyvis networkx phonenumbers aiohttp\n  pip install -e maigret/"
+    fi
+fi
+
+# ── Create dirs + load .env ───────────────────────────────────
+mkdir -p output/images databaselocal 2>/dev/null
+
+if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+    cp .env.example .env
+    ok ".env created from template — edit .env to configure Telegram bot etc."
+fi
+
+if [ -f ".env" ]; then
+    set -a; source .env 2>/dev/null; set +a
+fi
+
+# ── Battery check (Termux) ─────────────────────────────────────
+if $IS_TERMUX && command -v termux-battery-status &>/dev/null; then
+    BATTERY=$(termux-battery-status 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const b=JSON.parse(d);console.log(b.percentage+'% '+b.status)}catch(e){}})" 2>/dev/null)
+    if [ -n "$BATTERY" ]; then
+        BATT_NUM=$(echo "$BATTERY" | grep -o '[0-9]*' | head -1)
+        if [ "$BATT_NUM" -lt 20 ] 2>/dev/null; then
+            warn "Battery low: $BATTERY — long scans may be interrupted"
+        else
+            ok "Battery: $BATTERY"
+        fi
+    fi
+fi
+
+# ── Check for updates ─────────────────────────────────────────
+if command -v git &>/dev/null && [ -d ".git" ]; then
+    BEHIND=$(git fetch --dry-run 2>&1 | grep -c "origin/main" || echo 0)
+    if [ "$BEHIND" -gt "0" ] 2>/dev/null; then
+        warn "Updates available! Run: git pull && bash stalker.sh"
+    fi
+fi
+
+echo ""
+echo -e "  ${BOLD}Ready!${NC} Launching Stalker Strike..."
 echo ""
 
-# Detect Termux
-IS_TERMUX=false
-[ -d /data/data/com.termux ] && IS_TERMUX=true
-
-# Step 1: install base dependencies (ADDED: python-whois & aiohttp)
-echo "[SETUP] Installing base dependencies..."
-$PYTHON -m pip install httpx click rich python-dotenv jinja2 googlesearch-python pyvis networkx phonenumbers python-whois aiohttp --quiet
-if [ $? -ne 0 ]; then
-    echo "[ERROR] Failed to install base dependencies!"
-    echo "  Try: pip install httpx click rich python-dotenv jinja2 googlesearch-python python-whois aiohttp"
-    read -p "Press Enter to exit..."
-    exit 1
-fi
-echo "[OK] Base dependencies installed"
-
-# Step 2: install maigret — minimal deps for fast Termux install
-echo "[SETUP] Installing Maigret (core search only)..."
-INSTALL_OK=false
-if $IS_TERMUX; then
-    # On Termux: avoid C-compilation-heavy packages we don't use
-    echo "       Termux: installing maigret with minimal dependencies..."
-    $PYTHON -m pip install aiohttp aiohttp-socks certifi colorama html5lib Jinja2 \
-        MarkupSafe PySocks requests socid-extractor soupsieve alive_progress \
-        typing-extensions yarl platformdirs pycountry python-socks python-dateutil --quiet
-    if [ $? -eq 0 ]; then
-        $PYTHON -m pip install -e maigret/ --no-deps --quiet && INSTALL_OK=true
-    fi
-else
-    # Linux: full install (faster with proper build tools)
-    $PYTHON -m pip install -e maigret/ --quiet && INSTALL_OK=true
-fi
-
-if ! $INSTALL_OK; then
-    if $IS_TERMUX; then
-        echo "[WARN] Minimal install failed, trying with aiodns stripped..."
-        sed -i '/aiodns/d' maigret/pyproject.toml
-        $PYTHON -m pip install aiohttp aiohttp-socks certifi colorama html5lib Jinja2 \
-            MarkupSafe PySocks requests socid-extractor soupsieve alive_progress \
-            typing-extensions yarl platformdirs pycountry --quiet
-        if [ $? -eq 0 ]; then
-            $PYTHON -m pip install -e maigret/ --no-deps --quiet && INSTALL_OK=true
-        fi
-        git checkout maigret/pyproject.toml 2>/dev/null
-    else
-        echo "[WARN] Full install failed, retrying with aiodns stripped..."
-        sed -i '/aiodns/d' maigret/pyproject.toml
-        $PYTHON -m pip install -e maigret/ --quiet && INSTALL_OK=true
-        git checkout maigret/pyproject.toml 2>/dev/null
-    fi
-fi
-
-if ! $INSTALL_OK; then
-    echo "[ERROR] Maigret install still failed."
-    if $IS_TERMUX; then
-        echo "  Make sure build tools are installed:"
-        echo "    pkg install binutils clang build-essential python-static"
-    else
-        echo "  Install build tools first:"
-        echo "    sudo apt install python3-dev build-essential"
-    fi
-    echo "  Then re-run: bash stalker.sh"
-    read -p "Press Enter to exit..."
-    exit 1
-fi
-echo "[OK] Maigret installed"
-
-# Create dirs
-mkdir -p output/images
-
-# Load .env (dotenv for Termux)
-if [ -f ".env" ]; then
-    set -a
-    source .env
-    set +a
-elif [ -f ".env.example" ]; then
-    cp .env.example .env
-    set -a
-    source .env
-    set +a
-fi
-
-# Launch menu
+# ── Launch ────────────────────────────────────────────────────
 $PYTHON -m stalker.menu
