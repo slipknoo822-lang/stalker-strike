@@ -1,0 +1,15 @@
+# Stalker Strike v2.0 — Dependencies
+# Maigret is installed from local clone via: pip install -e maigret/
+-e maigret/
+httpx>=0.24
+click>=8.0
+rich>=13.0
+python-dotenv>=1.0
+googlesearch-python>=1.2
+jinja2>=3.0
+pyvis>=0.3.2
+networkx>=2.6.3
+phonenumbers>=8.13
+python-whois>=0.8.0
+aiohttp>=3.8.0
+aiofiles>=23.0

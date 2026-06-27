@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stalker"
+version = "1.0.0"
+description = "OSINT All-in-One Investigation Tool - Maigret + Custom APIs + Reverse Image + Smart Dork + Recursive Search"
+requires-python = ">=3.10"
+dependencies = [
+    "maigret>=0.15",
+    "httpx>=0.24",
+    "click>=8.0",
+    "rich>=13.0",
+    "python-dotenv>=1.0",
+    "googlesearch-python>=1.2",
+    "jinja2>=3.0",
+    "pyvis>=0.3.2",
+    "networkx>=2.6.3",
+    "phonenumbers>=8.13",
+]
+
+[project.scripts]
+stalker = "stalker.cli:cli"
+stalker-menu = "stalker.menu:show_menu"
+
+[tool.setuptools]
+packages = ["stalker", "stalker.modules", "stalker.reporters"]
