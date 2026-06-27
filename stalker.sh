@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stalker Strike v2.0 — OSINT + Cyber Intelligence Tool
+# OMNI v2.0 — OSINT + Cyber Intelligence Tool
 # Termux Android / Linux / macOS
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -14,15 +14,15 @@ err()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 clear
 echo -e "${BOLD}${CYAN}"
 cat << 'BANNER'
-  _____ _______       _      _  ________ _____
- / ____|__   __|/\   | |    | |/ /  ____|  __ \
-| (___    | |  /  \  | |    | ' /| |__  | |__) |
- \___ \   | | / /\ \ | |    |  < |  __| |  _  /
- ____) |  | |/ ____ \| |____| . \| |____| | \ \
-|_____/   |_/_/    \_\______|_|\_\______|_|  \_\
+   _____ ___  ______  __ __
+  / __  // _ \|  _  \/  |  \
+  \/ /_// | | || |_| / __|  |
+  /  __/| |_| ||  _ < |  |  |
+  \___\ \___/\_|_| \_\___/__|
 BANNER
 echo -e "${NC}"
-echo -e "  ${BOLD}v2.0 — Cyber Intelligence Edition${NC}"
+echo -e "  ${BOLD}INTELLIGENCE GATHERING SYSTEM${NC}"
+echo -e "  v2.0 — Cyber Intelligence Edition"
 echo -e "  Maigret + GitHub Intel + Reddit + Gravatar + Wayback"
 echo -e "  Correlation Engine + Timeline + Risk Score + Dark Web"
 echo ""
@@ -101,7 +101,7 @@ fi
 
 # ── Battery check (Termux) ─────────────────────────────────────
 if $IS_TERMUX && command -v termux-battery-status &>/dev/null; then
-    BATTERY=$(termux-battery-status 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const b=JSON.parse(d);console.log(b.percentage+'% '+b.status)}catch(e){}})" 2>/dev/null)
+    BATTERY=$(termux-battery-status 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const b=JSON.parse(d);console.log(b.percentage+'% '+b.status)}catch(e){}});" 2>/dev/null)
     if [ -n "$BATTERY" ]; then
         BATT_NUM=$(echo "$BATTERY" | grep -o '[0-9]*' | head -1)
         if [ "$BATT_NUM" -lt 20 ] 2>/dev/null; then
@@ -121,7 +121,7 @@ if command -v git &>/dev/null && [ -d ".git" ]; then
 fi
 
 echo ""
-echo -e "  ${BOLD}Ready!${NC} Launching Stalker Strike..."
+echo -e "  ${BOLD}Ready!${NC} Launching OMNI Intelligence System..."
 echo ""
 
 # ── Launch ────────────────────────────────────────────────────
