@@ -491,6 +491,17 @@ async def run_dork_only(name: str, categories: List[str] = None) -> Dict[str, An
 # ============================================================
 
 async def _run_maigret(username: str, max_sites: int = None, **kwargs) -> Dict[str, Any]:
+    # DNS FIX: Apply mobile optimization before any network calls
+    try:
+        from stalker.modules.dns_fix import patch_dns_for_termux
+        patch_dns_for_termux()
+    except ImportError:
+        pass
+    from stalker.config import IS_TERMUX
+    import socket as _sock
+    if IS_TERMUX:
+        _sock.setdefaulttimeout(30)
+
     maigret_root = Path(__file__).resolve().parent.parent / "maigret"
     maigret_pkg = maigret_root / "maigret"
 

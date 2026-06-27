@@ -194,3 +194,114 @@ def _print_whatsapp(d: Dict):
         term.print_warning(f"    Telegram: {tg_name or 'found'}")
     if plat.get("google_mentions",{}).get("urls"):
         term.print_warning(f"    Google mentions: {len(plat['google_mentions']['urls'])} URL(s)")
+
+
+async def run_layer3_behavioral(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Layer 3: Behavioral Intelligence — Pattern of Life, Writing Fingerprint, Crypto."""
+    term.print_phase("L3", "Behavioral Intel", "Pattern of Life → Writing Fingerprint → Crypto Trace...")
+
+    from .modules.pattern_of_life import full_pattern_of_life, format_pattern_report
+    from .modules.writing_fingerprint import full_writing_fingerprint, format_fingerprint_report
+    from .modules.crypto_tracer import trace_all, format_crypto_report
+
+    pol, wfp, crypto = await asyncio.gather(
+        asyncio.get_event_loop().run_in_executor(None, full_pattern_of_life, result),
+        asyncio.get_event_loop().run_in_executor(None, full_writing_fingerprint, result),
+        trace_all(result),
+        return_exceptions=True,
+    )
+
+    if isinstance(pol, dict):
+        result["pattern_of_life"] = pol
+        print(format_pattern_report(pol))
+    if isinstance(wfp, dict):
+        result["writing_fingerprint"] = wfp
+        print(format_fingerprint_report(wfp))
+    if isinstance(crypto, dict):
+        result["crypto_trace"] = crypto
+        print(format_crypto_report(crypto))
+
+    return result
+
+
+async def run_layer4_network(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Layer 4: Network Intelligence — Social Graph, Geofence."""
+    term.print_phase("L4", "Network Intel", "Social Graph → Geofence Estimation...")
+
+    from .modules.social_graph import full_social_graph, format_social_graph
+    from .modules.geofence_estimator import full_geofence, format_geofence_report
+
+    sg, geo = await asyncio.gather(
+        full_social_graph(result),
+        asyncio.get_event_loop().run_in_executor(None, full_geofence, result),
+        return_exceptions=True,
+    )
+
+    if isinstance(sg, dict):
+        result["social_graph"] = sg
+        print(format_social_graph(sg))
+    if isinstance(geo, dict):
+        result["geofence"] = geo
+        print(format_geofence_report(geo))
+
+    return result
+
+
+async def run_layer5_forensics(result: Dict[str, Any], raw_email_headers: str = "") -> Dict[str, Any]:
+    """Layer 5: Technical Forensics — Email Header, Domain OSINT."""
+    tasks = []
+
+    if raw_email_headers:
+        term.print_phase("L5a", "Email Header Forensics", "Analyzing email headers...")
+        from .modules.email_header_forensics import full_email_header_forensics, format_header_forensics
+        eh = await full_email_header_forensics(raw_email_headers)
+        result["email_header_forensics"] = eh
+        print(format_header_forensics(eh))
+
+    # Domain OSINT if target has email domain or linked website
+    target = result.get("username","") or result.get("email","")
+    domain_to_check = ""
+    if "@" in target:
+        domain_to_check = target.split("@")[-1]
+    else:
+        # Look for domain in found sites
+        for site in result.get("maigret",{}).get("found_sites",[]):
+            url = site.get("url_user","")
+            import re as _re
+            m = _re.search(r'https?://(?:www\.)?([a-zA-Z0-9.-]+)', url)
+            if m and "." in m.group(1):
+                domain_to_check = m.group(1)
+                break
+
+    if domain_to_check and not any(s in domain_to_check for s in
+        ["twitter","instagram","github","reddit","facebook","tiktok","youtube"]):
+        term.print_phase("L5b", "Domain OSINT", f"Investigating {domain_to_check}...")
+        from .modules.domain_osint import full_domain_osint, format_domain_report
+        d_intel = await full_domain_osint(domain_to_check)
+        result["domain_intel"] = d_intel
+        print(format_domain_report(d_intel))
+
+    return result
+
+
+async def run_layer6_reconstruction(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Layer 6: Deep Reconstruction — Evidence Dossier."""
+    term.print_phase("L6", "Evidence Dossier", "Compiling formal investigation dossier...")
+    from .modules.evidence_builder import generate_evidence_report, save_evidence_dossier
+    print(generate_evidence_report(result))
+    saved = await save_evidence_dossier(result)
+    for k, v in saved.items():
+        if not k.endswith("_error"): term.print_success(f"  Dossier → {v}")
+    result["dossier_saved"] = saved
+    return result
+
+
+async def run_full_cyber_intel(result: Dict[str, Any], input_type: str = "username",
+                                raw_email_headers: str = "") -> Dict[str, Any]:
+    """Run ALL 6 layers of cyber intelligence."""
+    result = await run_cyber_intel(result, input_type)          # Layers 1+2+A+B+C
+    result = await run_layer3_behavioral(result)                 # Layer 3
+    result = await run_layer4_network(result)                    # Layer 4
+    result = await run_layer5_forensics(result, raw_email_headers)  # Layer 5
+    result = await run_layer6_reconstruction(result)             # Layer 6
+    return result

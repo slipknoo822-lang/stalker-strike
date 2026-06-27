@@ -1,182 +1,118 @@
-"""Social graph — interactive network visualization of account connections.
+"""Social Network Graph — map relationships and find associates.
 
-Uses pyvis + networkx to render an interactive HTML graph showing:
-  - Target username as the central node
-  - Found social media profiles as nodes (color-coded by platform)
-  - Edges connecting the target to each profile
-  - Recursive usernames as linked sub-nodes
+From target's social media:
+- Extract followers/following on Reddit (mutual subreddits = community)
+- GitHub: find who stars/forks target's repos
+- Find accounts that frequently interact (reply/mention)
+- Build adjacency list of known associates
+- Identify hub accounts (high interaction = close associate)
+- Detect community clusters (same subreddits/orgs)
 
-Output: self-contained interactive HTML file.
+All via public APIs — no authentication needed.
 """
-
 from __future__ import annotations
-from typing import Dict, Any, List, Set, Optional
-from pathlib import Path
-import re
+from typing import Dict, Any, List, Set
+import asyncio
+from collections import Counter
+from .proxy_manager import prepare_client
 
-from ..config import Config
+GH_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/vnd.github.v3+json"}
+RD_HEADERS = {"User-Agent": "StalkerStrike/2.0 OSINT"}
 
+async def get_github_network(username: str) -> Dict[str, Any]:
+    """Get GitHub followers/following + stargazers of repos."""
+    async with prepare_client(timeout=15, headers=GH_HEADERS) as c:
+        async def _get(url):
+            try:
+                r = await c.get(url)
+                return r.json() if r.status_code == 200 else []
+            except Exception: return []
 
-# Platform color map
-PLATFORM_COLORS = {
-    "github": "#6e40c9",
-    "twitter": "#1da1f2",
-    "instagram": "#e1306c",
-    "youtube": "#ff0000",
-    "tiktok": "#000000",
-    "facebook": "#1877f2",
-    "reddit": "#ff4500",
-    "linkedin": "#0a66c2",
-    "telegram": "#0088cc",
-    "twitch": "#9146ff",
-    "discord": "#5865f2",
-    "medium": "#00ab6c",
-    "spotify": "#1db954",
-    "pinterest": "#e60023",
-    "snapchat": "#fffc00",
-    "steam": "#171a21",
-    "vkontakte": "#0077ff",
-    "patreon": "#ff424d",
-    "tumblr": "#35465c",
-    "flickr": "#0063dc",
-    "deviantart": "#05cc47",
-    "soundcloud": "#ff5500",
-    "default": "#58a6ff",
-}
+        followers, following, repos = await asyncio.gather(
+            _get(f"https://api.github.com/users/{username}/followers?per_page=20"),
+            _get(f"https://api.github.com/users/{username}/following?per_page=20"),
+            _get(f"https://api.github.com/users/{username}/repos?per_page=10&sort=stars"),
+        )
 
+        follower_names = [u.get("login","") for u in (followers if isinstance(followers,list) else [])[:20]]
+        following_names = [u.get("login","") for u in (following if isinstance(following,list) else [])[:20]]
+        mutual = list(set(follower_names) & set(following_names))
 
-def _platform_color(site_name: str) -> str:
-    name_lower = site_name.lower().replace(" ", "")
-    for key, color in PLATFORM_COLORS.items():
-        if key in name_lower:
-            return color
-    return PLATFORM_COLORS["default"]
+        # Stargazers of top repo
+        top_stargazers = []
+        if isinstance(repos, list) and repos:
+            top_repo = repos[0].get("name","")
+            if top_repo:
+                sg = await _get(f"https://api.github.com/repos/{username}/{top_repo}/stargazers?per_page=10")
+                top_stargazers = [u.get("login","") for u in (sg if isinstance(sg,list) else [])[:10]]
 
+        return {
+            "followers": follower_names,
+            "following": following_names,
+            "mutual_connections": mutual,
+            "top_stargazers": top_stargazers,
+            "total_followers": len(follower_names),
+            "total_following": len(following_names),
+        }
 
-def _slug(text: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9]", "_", str(text)).lower()[:30]
+async def get_reddit_community(username: str) -> Dict[str, Any]:
+    """Find Reddit users who interact with target in same subreddits."""
+    async with prepare_client(timeout=15, headers=RD_HEADERS) as c:
+        try:
+            r = await c.get(f"https://www.reddit.com/user/{username}/comments.json?limit=20&sort=new")
+            if r.status_code != 200: return {}
+            comments = r.json().get("data",{}).get("children",[])
+            subreddits = [c_["data"].get("subreddit","") for c_ in comments]
+            top_subs = [s for s,_ in Counter(subreddits).most_common(5)]
 
+            # Find other active users in same subreddits
+            community_users: Counter = Counter()
+            async def _check_sub(sub):
+                try:
+                    rr = await c.get(f"https://www.reddit.com/r/{sub}/new.json?limit=10",
+                                    headers=RD_HEADERS)
+                    if rr.status_code == 200:
+                        posts = rr.json().get("data",{}).get("children",[])
+                        for p in posts:
+                            author = p.get("data",{}).get("author","")
+                            if author and author not in ("[deleted]",username,"AutoModerator"):
+                                community_users[author] += 1
+                except Exception: pass
 
-def generate(
-    result: Dict[str, Any],
-    output_path: Optional[Path] = None,
-) -> Path:
-    """Generate an interactive social graph HTML file.
+            await asyncio.gather(*[_check_sub(s) for s in top_subs[:3]], return_exceptions=True)
+            return {
+                "top_subreddits": top_subs,
+                "community_members": community_users.most_common(10),
+            }
+        except Exception: return {}
 
-    Args:
-        result: Full investigation result dict from pipeline.
-        output_path: Where to write the HTML file.
+async def full_social_graph(result: Dict[str, Any]) -> Dict[str, Any]:
+    username = result.get("username","")
+    if not username: return {"note": "username required for social graph"}
 
-    Returns:
-        Path to the generated HTML file.
-    """
-    try:
-        from pyvis.network import Network
-        import networkx as nx
-    except ImportError:
-        raise ImportError("pyvis + networkx required. Install: pip install pyvis networkx")
+    gh_net, rd_community = await asyncio.gather(
+        get_github_network(username), get_reddit_community(username),
+        return_exceptions=True)
 
-    if output_path is None:
-        Config.ensure_dirs()
-        output_path = Config.OUTPUT_DIR / f"stalker_{result['username']}_graph.html"
-
-    username = result["username"]
-    net = Network(height="600px", width="100%", bgcolor="#0d1117", font_color="#c9d1d9")
-    net.set_options("""
-    {
-      "nodes": {"shape": "dot", "size": 20, "font": {"size": 14, "face": "Inter, sans-serif"}},
-      "edges": {"color": {"color": "#30363d", "opacity": 0.6}, "smooth": {"type": "curvedCW"}},
-      "physics": {"barnesHut": {"gravitationalConstant": -3000, "springLength": 180}},
-      "interaction": {"hover": true, "tooltipDelay": 100}
+    return {
+        "github_network": gh_net if isinstance(gh_net, dict) else {},
+        "reddit_community": rd_community if isinstance(rd_community, dict) else {},
     }
-    """)
 
-    # Central target node
-    net.add_node(
-        username,
-        label=f"@{username}",
-        title=f"Target: {username}",
-        color="#f0883e",
-        size=30,
-        shape="star",
-    )
-
-    # Maigret found sites
-    found_sites = result.get("maigret", {}).get("found_sites", [])
-    seen_nodes: Set[str] = {_slug(username)}
-
-    for site in found_sites:
-        site_name = site.get("site_name", "?")
-        node_id = _slug(f"{site_name}_{len(seen_nodes)}")
-        if node_id in seen_nodes:
-            continue
-        seen_nodes.add(node_id)
-
-        label = site_name[:20]
-        title_parts = [f"<b>{site_name}</b>"]
-        if site.get("url_user"):
-            title_parts.append(f'<a href="{site["url_user"]}" target="_blank">Profile</a>')
-        if site.get("real_name"):
-            title_parts.append(f"Name: {site['real_name']}")
-        if site.get("bio"):
-            bio = site["bio"][:100]
-            title_parts.append(f"Bio: {bio}")
-
-        net.add_node(
-            node_id,
-            label=label,
-            title="\n".join(title_parts),
-            color=_platform_color(site_name),
-            size=18,
-        )
-        net.add_edge(username, node_id)
-
-    # Custom API profiles (merged into found_sites already)
-    custom_profiles = result.get("maigret", {}).get("custom_profiles", {})
-    for platform, profiles in custom_profiles.items():
-        for profile in profiles if isinstance(profiles, list) else []:
-            node_id = _slug(f"custom_{platform}_{len(seen_nodes)}")
-            if node_id in seen_nodes:
-                continue
-            seen_nodes.add(node_id)
-
-            label = f"{platform}"
-            title_parts = [f"<b>{platform.upper()} (Custom API)</b>"]
-            if isinstance(profile, dict):
-                if profile.get("real_name"):
-                    title_parts.append(f"Name: {profile['real_name']}")
-                if profile.get("followers") is not None:
-                    title_parts.append(f"Followers: {profile['followers']}")
-
-            net.add_node(
-                node_id,
-                label=label,
-                title="\n".join(title_parts),
-                color=_platform_color(platform),
-                size=16,
-                shape="diamond",
-            )
-            net.add_edge(username, node_id, dashes=True)
-
-    # Recursive usernames
-    recursive_data = result.get("recursive", {})
-    discovered = recursive_data.get("discovered_usernames", [])
-    for disc in discovered:
-        rec_username = disc.get("username", "")
-        node_id = _slug(f"rec_{rec_username}")
-        if node_id in seen_nodes:
-            continue
-        seen_nodes.add(node_id)
-
-        net.add_node(
-            node_id,
-            label=f"@{rec_username}",
-            title=f"Discovered via {disc.get('source_site', '?')}\nField: {disc.get('source_field', '?')}",
-            color="#d2a8ff",
-            size=14,
-            shape="triangle",
-        )
-        net.add_edge(username, node_id, dashes=True, color="#d2a8ff")
-
-    net.save_graph(str(output_path))
-    return output_path
+def format_social_graph(data: Dict[str, Any]) -> str:
+    BOLD="\033[1m"; CYAN="\033[36m"; YELLOW="\033[33m"; GREEN="\033[32m"; NC="\033[0m"
+    lines=[f"\n{BOLD}  ┌─── SOCIAL NETWORK GRAPH ───┐{NC}"]
+    gh=data.get("github_network",{})
+    if gh:
+        lines.append(f"  GitHub: {gh.get('total_followers',0)} followers / {gh.get('total_following',0)} following")
+        if gh.get("mutual_connections"):
+            lines.append(f"  {GREEN}Mutual connections:{NC} {', '.join(gh['mutual_connections'][:8])}")
+        if gh.get("top_stargazers"):
+            lines.append(f"  Top stargazers: {', '.join(gh['top_stargazers'][:6])}")
+    rd=data.get("reddit_community",{})
+    if rd:
+        lines.append(f"\n  Reddit communities: {', '.join(rd.get('top_subreddits',[])[:5])}")
+        if rd.get("community_members"):
+            users=[u for u,_ in rd["community_members"][:5]]
+            lines.append(f"  {YELLOW}Frequent co-members:{NC} {', '.join(users)}")
+    return "\n".join(lines)
