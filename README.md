@@ -1,14 +1,15 @@
-# Stalker Strike v2.0
+# OMNI v2.0
 
-All-in-one OSINT investigation CLI tool. Enter a username, email, or phone → auto-detect input type → run targeted investigation across 600+ social networks, 30+ email platforms, 6 phone carriers, breach intelligence, face recognition (5 engines), Telegram profiling, smart dorking, recursive discovery, social graph, **IP tracking**, **dark web scanning**, **username permutations**, and **native Termux notifications** — auto-saved as interactive HTML report.
+All-in-one OSINT investigation CLI tool. Enter a username, email, or phone → auto-detect input type → run targeted investigation across 600+ social networks, 30+ email platforms, 6 phone carriers, dark web sources, and more.
 
 ```
-  _____ _______       _      _  ________ _____
- / ____|__   __|/\   | |    | |/ /  ____|  __ \
-| (___    | |  /  \  | |    | ' /| |__  | |__) |
- \___ \   | | / /\ \ | |    |  < |  __| |  _  /
- ____) |  | |/ ____ \| |____| . \| |____| | \ \
-|_____/   |_/_/    \_\______|_|\_\______|_|  \_\
+   _____ ___  ______  __ __
+  / __  // _ \|  _  \/  |  \
+  \/ /_// | | || |_| / __|  |
+  /  __/| |_| ||  _ < |  |  |
+  \___\ \___/\_|_| \_\___/__|
+
+INTELLIGENCE GATHERING SYSTEM v2.0
 ```
 
 ---
@@ -23,7 +24,7 @@ All-in-one OSINT investigation CLI tool. Enter a username, email, or phone → a
 - **Social Graph** — Interactive network visualization of found accounts (pyvis)
 - **Auto-detection** — Automatically detects username / email / phone from input
 - **Stealth Mode** — Random User-Agent rotation, request jitter
-- **HTML + JSON Reports** — Auto-saved with timestamps, local avatar images
+- **HTML + JSON Reports** — Professional dark-themed reports, local avatar images
 
 ### Email & Breach Intelligence
 - **Email Scanner** — Check registration on 30+ platforms
@@ -115,7 +116,6 @@ python -m stalker.cli ip me                       # Your own IP info
 python -m stalker.cli variants johndoe            # Generate 150+ username variants
 python -m stalker.cli variants johndoe --search   # Generate + search top variants
 python -m stalker.cli darkweb test@gmail.com      # Dark web / paste site check
-python -m stalker.cli termux                      # Test Termux:API features
 
 # Other
 python -m stalker.cli exif image.jpg              # EXIF from file
@@ -138,7 +138,7 @@ Detected: USERNAME
 [6] Guided Mode            — Pick specific modules
 [7] Linktree/Bio.site      — Check link aggregators
 [8] Pastebin Leak Check    — Search pastebin/justpaste
-[9] Username Variants      — Generate + search permutations  (NEW)
+[9] Username Variants      — Generate + search permutations
 
 Enter username, email, or phone: test@gmail.com
 Detected: EMAIL
@@ -146,7 +146,7 @@ Detected: EMAIL
 [1] Full Investigation     — Email Scanner + Breach + Dark Web + Dork
 [2] Email Scanner Only     — 30+ platforms
 [3] Breach Check + Dork    — Hudson Rock + Smart Dork
-[4] Dark Web Only          — Paste sites + breach DBs         (NEW)
+[4] Dark Web Only          — Paste sites + breach DBs
 [5] Domain WHOIS Check     — WHOIS lookup
 [6] Guided Mode            — Pick specific modules
 
@@ -231,20 +231,6 @@ python -m stalker.cli termux
 
 ---
 
-## Acknowledgments
+## License
 
-| Project | Author | Used For |
-|---------|--------|----------|
-| [Maigret](https://github.com/soxoj/maigret) | soxoj | Username search engine |
-| [holehe](https://github.com/megadose/holehe) | megadose | Email verification modules |
-| [ignorant](https://github.com/megadose/ignorant) | megadose | Phone number lookup |
-| [cb-phonehunter](https://github.com/ciberbrigada/cb-phonehunter) | ciberbrigada | Phone lib + Truecaller |
-| [IntelHub](https://github.com/tomsec8/IntelHub) | tomsec8 | Telegram profiler + text extraction |
-| [user-scanner](https://github.com/kaifcodec/user-scanner) | kaifcodec | Hudson Rock breach check |
-| [Xemoz API](https://api-xemoz-official.my.id) | — | Social media enrichment |
-| [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | FlareSolverr | Cloudflare bypass |
-| ip-api.com | — | IP geolocation (free) |
-| Shodan InternetDB | Shodan | Free port/vuln data |
-| Psbdmp | — | Pastebin dump search |
-| [Pwned Passwords](https://haveibeenpwned.com/API/v3) | Troy Hunt | Password leak check |
-| [phonenumbers](https://github.com/daviddrysdale/python-phonenumbers) | David Drysdale | Phone E164/carrier/geo |
+MIT © OMNI Intelligence Project
